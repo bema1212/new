@@ -9,10 +9,10 @@ export default async function handler(req, res) {
       return res.status(200).end();
     }
 
-    const { target0, target2 } = req.query;
+    const { target0, target1, target2 } = req.query;
 
-    if (!target0 || !target2) {
-      return res.status(400).json({ error: "Both target0 and target2 parameters are required" });
+    if (!target0 || !target1 || !target2) {
+      return res.status(400).json({ error: "Both target0, target1, and target2 parameters are required" });
     }
 
     const apiUrl0 = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${target0}`;
@@ -101,7 +101,7 @@ export default async function handler(req, res) {
         const filteredEponData = eponData.filter(item => item !== null);
 
         // Combine NEARBY_BAG, COORDS_DATA, and EPON_DATA based on identificatie
-        const combinedData = data4.features.map(feature => {
+        const combinedData = await Promise.all(data4.features.map(async feature => {
           const identificatie = feature.properties?.identificatie;
           const pandidentificatie = feature.properties?.pandidentificatie;
 
@@ -110,12 +110,30 @@ export default async function handler(req, res) {
           // Find corresponding EPON data
           const eponItem = filteredEponData.find(item => item.identificatie === identificatie);
 
+          // If the EPON item matches target1 and has an error, fetch new data
+          if (eponItem && eponItem.identificatie === target1 && !eponItem.error) {
+            const eponUrl = `https://yxorp-pi.vercel.app/api/handler?url=https://pico.geodan.nl/cgi-bin/qgis_mapserv.fcgi?DPI=120&map=/usr/lib/cgi-bin/projects/gebouw_woningtype.qgs&SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo&&I=2&J=2&CRS=EPSG%3A28992&STYLES=&WIDTH=5&HEIGHT=5&BBOX=${target2}&LAYERS=gebouw&STYLES=&FORMAT=image%2Fjpeg&QUERY_LAYERS=gebouw&INFO_FORMAT=text/xml&FEATURE_COUNT=2`;
+
+            const response = await fetch(eponUrl, {
+              headers: { 'Content-Type': 'application/json' },
+            });
+
+            if (!response.ok || response.status === 404) {
+              const alternateData = await response.json(); // Or handle the error as needed
+              return {
+                ...feature,
+                COORDS: coordsItem ? coordsItem.COORDS : null,
+                EPON: alternateData, // Store alternate data
+              };
+            }
+          }
+
           return {
             ...feature,
             COORDS: coordsItem ? coordsItem.COORDS : null,
             EPON: eponItem ? eponItem.EPON : null,
           };
-        });
+        }));
 
         const finalCombinedData = {
           BAG: data0,
