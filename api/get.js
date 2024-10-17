@@ -20,7 +20,7 @@ export default async function handler(req, res) {
 
     const [response0, response2] = await Promise.all([
       fetch(apiUrl0, { headers: { 'Content-Type': 'application/json' } }), // BAG-info obv zoek-adres
-      fetch(apiUrl2, { headers: { 'Content-Type': 'application/json' } })  // Netbeheerders
+      fetch(apiUrl2, { headers: { 'Content-Type': 'application/json' } }) // Netbeheerders
     ]);
 
     if (response0.ok && response2.ok) {
@@ -71,9 +71,9 @@ export default async function handler(req, res) {
         // Filter out any null results from the coordsData array
         const filteredCoordsData = coordsData.filter(item => item !== null);
 
-        // Fetch EPON data for each identificatie in data4
+        // For each identificatie, fetch EPON data
         const eponData = await Promise.all(data4.features.map(async feature => {
-          const identificatie = feature.properties?.identificatie; 
+          const identificatie = feature.properties?.identificatie;
           if (!identificatie) return null; // Skip if no identificatie
 
           const apiUrlEpon = `https://yxorp-pi.vercel.app/api/handler?url=https://public.ep-online.nl/api/v4/PandEnergielabel/AdresseerbaarObject/${identificatie}`;
@@ -100,16 +100,31 @@ export default async function handler(req, res) {
         // Filter out any null results from the eponData array
         const filteredEponData = eponData.filter(item => item !== null);
 
-        const combinedData = {
+        // Combine NEARBY_BAG, COORDS_DATA, and EPON_DATA based on identificatie
+        const combinedData = data4.features.map(feature => {
+          const identificatie = feature.properties?.identificatie;
+          const pandidentificatie = feature.properties?.pandidentificatie;
+
+          // Find corresponding COORDS data
+          const coordsItem = filteredCoordsData.find(item => item.pandidentificatie === pandidentificatie);
+          // Find corresponding EPON data
+          const eponItem = filteredEponData.find(item => item.identificatie === identificatie);
+
+          return {
+            ...feature,
+            COORDS: coordsItem ? coordsItem.COORDS : null,
+            EPON: eponItem ? eponItem.EPON : null,
+          };
+        });
+
+        const finalCombinedData = {
           BAG: data0,
           NETB: data2,
           KADAS: data3,
-          NEARBY_BAG: data4,
-          COORDS_DATA: filteredCoordsData, // Add COORDS data to combinedData
-          EPON_DATA: filteredEponData // Add EPON data to combinedData
+          NEARBY_BAG: combinedData, // Updated to include combined data
         };
 
-        res.status(200).json(combinedData);
+        res.status(200).json(finalCombinedData);
       } else {
         res.status(500).json({ error: "Error fetching data from the WMS or WFS API" });
       }
