@@ -35,7 +35,7 @@ export default async function handler(req, res) {
 
       const [x, y] = target2.split(',').map(coord => parseFloat(coord));
 
-      // Add function 4 for retrieving BAG data for nearby objects
+      // Retrieve BAG data for nearby objects
       const apiUrl4 = `https://service.pdok.nl/lv/bag/wfs/v2_0?service=WFS&version=2.0.0&request=GetFeature&propertyname=&count=200&outputFormat=json&srsName=EPSG:28992&typeName=bag:verblijfsobject&Filter=<Filter><DWithin><PropertyName>Geometry</PropertyName><gml:Point><gml:coordinates>${x},${y}</gml:coordinates></gml:Point><Distance units='m'>50</Distance></DWithin></Filter>`;
       const response4 = await fetch(apiUrl4, {
         headers: { 'Content-Type': 'application/json' },
@@ -45,11 +45,38 @@ export default async function handler(req, res) {
         const data3 = await response3.json();
         const data4 = await response4.json();
 
+        // For each identificatie, fetch COORDS data
+        const coordsData = await Promise.all(data4.features.map(async feature => {
+          const identificatie = feature.properties?.identificatie;
+          if (!identificatie) return null; // Skip if no identificatie
+
+          const apiUrlCoords = `https://service.pdok.nl/lv/bag/wfs/v2_0?service=wfs&version=2.0.0&request=getfeature&typename=bag:pand&outputFormat=application/json&filter=%3Cfes:Filter%20xmlns:fes=%22http://www.opengis.net/fes/2.0%22%20xmlns:xsi=%22http://www.w3.org/2001/XMLSchema-instance%22%20xsi:schemaLocation=%22http://www.opengis.net/wfs/2.0%20http://schemas.opengis.net/wfs/2.0/wfs.xsd%22%3E%3Cfes:PropertyIsEqualTo%3E%3Cfes:PropertyName%3Eidentificatie%3C/fes:PropertyName%3E%3Cfes:Literal%3E${identificatie}%3C/fes:Literal%3E%3C/fes:PropertyIsEqualTo%3E%3C/fes:Filter%3E`;
+
+          try {
+            const response = await fetch(apiUrlCoords, {
+              headers: { 'Content-Type': 'application/json' },
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              return { identificatie, COORDS: data };
+            } else {
+              return { identificatie, error: response.statusText };
+            }
+          } catch (error) {
+            return { identificatie, error: error.message };
+          }
+        }));
+
+        // Filter out any null results from the coordsData array
+        const filteredCoordsData = coordsData.filter(item => item !== null);
+
         const combinedData = {
           BAG: data0,
           NETB: data2,
           KADAS: data3,
-          NEARBY_BAG: data4 // Re-added function 4 results to combinedData
+          NEARBY_BAG: data4,
+          COORDS_DATA: filteredCoordsData // Add COORDS data to combinedData
         };
 
         res.status(200).json(combinedData);
