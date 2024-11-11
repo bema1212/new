@@ -76,7 +76,7 @@ export default async function handler(req, res) {
           const identificatie = feature.properties?.identificatie;
           if (!identificatie) return null; // Skip if no identificatie
 
-          const apiUrlEpon = `https://yxorp-pi.vercel.app/api/handler?url=https://public.ep-online.nl/api/v4/PandEnergielabel/AdresseerbaarObject/${identificatie}`;
+          const apiUrlEpon = `https://yxorp-pi.vercel.app/api/handler?url=https://public.ep-online.nl/api/v5/PandEnergielabel/AdresseerbaarObject/${identificatie}`;
 
           try {
             const response = await fetch(apiUrlEpon, {
